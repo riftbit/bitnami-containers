@@ -151,6 +151,45 @@ ldap_validate() {
     [[ "$error_code" -eq 0 ]] || exit "$error_code"
 }
 
+
+########################
+# Run ldapmodify command
+# Globals:
+#   None
+# Arguments:
+#   None
+# Returns:
+#   None
+#########################
+ldap_modify() {
+    local ldap_modify_command=$*
+    local ldap_modify_error=0
+    debug_execute ldapmodify "$ldap_modify_command" || ldap_modify_error="$?"
+    if [[ "$ldap_modify_error" -ne 0 ]]; then
+        error "ldapmodify command with args '$ldap_modify_command' failed with exit code ${ldap_modify_error}"
+        return "$ldap_modify_error"
+    fi
+}
+
+########################
+# Run ldapadd command
+# Globals:
+#   None
+# Arguments:
+#   None
+# Returns:
+#   None
+#########################
+ldap_add() {
+    local ldap_add_command=$*
+    local ldap_add_error=0
+    debug_execute ldapadd "$ldap_add_command" || ldap_add_error="$?"
+    if [[ "$ldap_add_error" -ne 0 ]]; then
+        error "ldapadd command with args '$ldap_add_command' failed with exit code ${ldap_modify_error}"
+        return "$ldap_add_error"
+    fi
+}
+
 ########################
 # Check if OpenLDAP is running
 # Globals:
@@ -381,7 +420,7 @@ add: olcRootPW
 olcRootPW: $LDAP_ENCRYPTED_CONFIG_ADMIN_PASSWORD
 EOF
     fi
-    debug_execute ldapmodify -Y EXTERNAL -H "ldapi:///" -f "${LDAP_SHARE_DIR}/admin.ldif"
+    ldap_modify -Y EXTERNAL -H "ldapi:///" -f "${LDAP_SHARE_DIR}/admin.ldif"
 }
 
 ########################
@@ -401,7 +440,7 @@ changetype: modify
 add: olcDisallows
 olcDisallows: bind_anon
 EOF
-    debug_execute ldapmodify -Y EXTERNAL -H "ldapi:///" -f "${LDAP_SHARE_DIR}/disable_anon_bind.ldif"
+    ldap_modify -Y EXTERNAL -H "ldapi:///" -f "${LDAP_SHARE_DIR}/disable_anon_bind.ldif"
 }
 
 ########################
@@ -417,7 +456,7 @@ ldap_add_schemas() {
     info "Adding LDAP extra schemas"
     read -r -a schemas <<< "$(tr ',;' ' ' <<< "${LDAP_EXTRA_SCHEMAS}")"
     for schema in "${schemas[@]}"; do
-        debug_execute ldapadd -Y EXTERNAL -H "ldapi:///" -f "${LDAP_CONF_DIR}/schema/${schema}.ldif"
+        ldap_modify -Y EXTERNAL -H "ldapi:///" -f "${LDAP_CONF_DIR}/schema/${schema}.ldif"
     done
 }
 
@@ -524,7 +563,7 @@ member: ${user/#/cn=},${LDAP_USER_DC/#/ou=},${LDAP_ROOT}
 EOF
     done
 
-    debug_execute ldapadd -f "${LDAP_SHARE_DIR}/tree.ldif" -H "ldapi:///" -D "$LDAP_ADMIN_DN" -w "$LDAP_ADMIN_PASSWORD"
+    ldap_modify -f "${LDAP_SHARE_DIR}/tree.ldif" -H "ldapi:///" -D "$LDAP_ADMIN_DN" -w "$LDAP_ADMIN_PASSWORD"
 }
 
 ########################
@@ -539,7 +578,7 @@ EOF
 ldap_add_custom_ldifs() {
     info "Loading custom LDIF files..."
     warn "Ignoring LDAP_USERS, LDAP_PASSWORDS, LDAP_USER_DC and LDAP_GROUP environment variables..."
-    find "$LDAP_CUSTOM_LDIF_DIR" -maxdepth 1 \( -type f -o -type l \) -iname '*.ldif' -print0 | sort -z | xargs --null -I{} bash -c ". /opt/bitnami/scripts/libos.sh && debug_execute ldapadd -f {} -H 'ldapi:///' -D \"$LDAP_ADMIN_DN\" -w \"$LDAP_ADMIN_PASSWORD\""
+    find "$LDAP_CUSTOM_LDIF_DIR" -maxdepth 1 \( -type f -o -type l \) -iname '*.ldif' -print0 | sort -z | xargs --null -I{} bash -c ". /opt/bitnami/scripts/libos.sh && ldap_modify -f {} -H 'ldapi:///' -D \"$LDAP_ADMIN_DN\" -w \"$LDAP_ADMIN_PASSWORD\""
 }
 
 ########################
@@ -676,5 +715,5 @@ replace: olcTLSDHParamFile
 olcTLSDHParamFile: $LDAP_TLS_DH_PARAMS_FILE
 EOF
     fi
-    debug_execute ldapmodify -Y EXTERNAL -H "ldapi:///" -f "${LDAP_SHARE_DIR}/certs.ldif"
+    ldap_modify -Y EXTERNAL -H "ldapi:///" -f "${LDAP_SHARE_DIR}/certs.ldif"
 }
